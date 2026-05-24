@@ -59,6 +59,9 @@ from .block import (
     ResNetLayer,
     SCDown,
     TorchVision,
+    ResNet50Backbone,
+    EfficientNetV2Backbone,
+    FeatureSelect,
 )
 from .conv import (
     CBAM,

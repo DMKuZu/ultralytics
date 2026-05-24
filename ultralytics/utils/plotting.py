@@ -318,6 +318,14 @@ class Annotator:
         if isinstance(box, torch.Tensor):
             box = box.tolist()
 
+        if not isinstance(box[0], list):  # only for standard boxes, not multi_points
+            box = [
+                min(box[0], box[2]),  # x1
+                min(box[1], box[3]),  # y1
+                max(box[0], box[2]),  # x2
+                max(box[1], box[3]),  # y2
+            ]
+
         multi_points = isinstance(box[0], list)  # multiple points with shape (n, 2)
         p1 = [int(b) for b in box[0]] if multi_points else (int(box[0]), int(box[1]))
         if self.pil:

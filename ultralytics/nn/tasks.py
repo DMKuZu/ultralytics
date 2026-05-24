@@ -73,6 +73,9 @@ from ultralytics.nn.modules import (
     YOLOESegment,
     YOLOESegment26,
     v10Detect,
+    ResNet50Backbone,
+    EfficientNetV2Backbone,
+    FeatureSelect,
 )
 from ultralytics.utils import DEFAULT_CFG_DICT, LOGGER, SETTINGS, WINDOWS, YAML, colorstr, emojis
 from ultralytics.utils.checks import REMOTE_FILE_PREFIXES, check_file, check_requirements, check_suffix, check_yaml
@@ -1816,6 +1819,25 @@ def parse_model(d, ch, verbose=True):
             c2 = args[0]
             c1 = ch[f]
             args = [*args[1:]]
+        elif m in (ResNet50Backbone, EfficientNetV2Backbone):
+            # 1. Initialize the backbone to get its out_channels list
+            m_ = m(*args)
+            c2 = m_.out_channels  # This is the list [P3, P4, P5]
+
+            # 2. DO NOT use ch.extend().
+            # Simply let c2 be the list; it will be appended to 'ch'
+            # as a single entry at the end of the loop.
+
+        elif m is FeatureSelect:
+            # args[0] is the index (0 for P3, 1 for P4, 2 for P5)
+            idx = args[0]
+
+            # ch[f] is now the list we saved in the backbone layer
+            # c2 now becomes a single integer (e.g., 2048) for the next layer
+            c2 = ch[f][idx]
+
+            # Initialize the selector module
+            m_ = m(*args)
         else:
             c2 = ch[f]
 

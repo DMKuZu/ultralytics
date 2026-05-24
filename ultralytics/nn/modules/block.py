@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import torch
+import timm
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.models import resnet50, ResNet50_Weights
 
 from ultralytics.utils.torch_utils import fuse_conv_and_bn
 
@@ -2071,3 +2073,51 @@ class RealNVP(nn.Module):
             self.float()
         z, log_det = self.backward_p(x)
         return self.prior.log_prob(z) + log_det
+    
+class ResNet50Backbone(nn.Module):
+    def __init__(self, pretrained=True):
+        super().__init__()
+        weights = ResNet50_Weights.DEFAULT if pretrained else None
+        model = resnet50(weights=weights)
+
+        # We break the model into stages to extract intermediate features
+        self.stem = nn.Sequential(model.conv1, model.bn1, model.relu, model.maxpool)
+        self.layer1 = model.layer1 # P2 (not used)
+        self.layer2 = model.layer2 # P3 (512 channels)
+        self.layer3 = model.layer3 # P4 (1024 channels)
+        self.layer4 = model.layer4 # P5 (2048 channels)
+
+        # Inform YOLO about the 3 output scales
+        self.out_channels = [512, 1024, 2048]
+
+    def forward(self, x):
+        x = self.stem(x)
+        x = self.layer1(x)
+        p3 = self.layer2(x)
+        p4 = self.layer3(p3)
+        p5 = self.layer4(p4)
+        return [p3, p4, p5] # Returns multi-scale features
+
+class EfficientNetV2Backbone(nn.Module):
+    def __init__(self, pretrained=True):
+        super().__init__()
+        self.model = timm.create_model('tf_efficientnetv2_s', pretrained=pretrained, features_only=True)
+        # Inform YOLO about the output channels for the 3 scales
+        self.out_channels = [
+            self.model.feature_info[-3]['num_chs'],
+            self.model.feature_info[-2]['num_chs'],
+            self.model.feature_info[-1]['num_chs']
+        ]
+
+    def forward(self, x):
+        # Return [P3, P4, P5] feature maps
+        return self.model(x)[-3:]
+
+class FeatureSelect(nn.Module):
+    """Selects a specific feature map from a list (e.g., picking P5 from [P3, P4, P5])."""
+    def __init__(self, index):
+        super().__init__()
+        self.index = index
+
+    def forward(self, x):
+        return x[self.index]
